@@ -176,13 +176,15 @@ test("no diagnosis at all blames nothing", () => {
 test("the estimate flag still gates the claim, after the floor is off", () => {
   // The two guards are independent: a flagged estimate carries no floor, and must not be
   // quoted as the turn's size no matter how the subtraction comes out.
-  // Measured: a 16,400-character tool result of newline and tab runs estimates at 8,218
-  // tokens and really renders as 836, a 9.8x overshoot, in a prompt of 866 tokens that
-  // fits the 4,096 window with room to spare. gemma-4 renders a lone tool message as
-  // nothing, so this is the branch every Gemma tool result takes.
+  // `latest_turn_exact: false` is now only the last-resort branch, where nothing could
+  // price the turn: the server prices an unrenderable turn by difference and reports it
+  // exact. The estimate and `irreducible_tokens` do not share units, so it must never be
+  // quoted as the turn's size however the subtraction comes out. Measured on the bundled
+  // gemma-4 template: 16,400 characters of newline and tab runs estimate 8,207 tokens
+  // against 557 rendered, in a prompt the turn is a few per cent of.
   const estimatedTurn = refusal({
     irreducible_tokens: 4449,
-    latest_turn_tokens: 8218,
+    latest_turn_tokens: 8207,
     shared_prompt_tokens: 0,
     latest_turn_role: "tool",
     latest_turn_exact: false,

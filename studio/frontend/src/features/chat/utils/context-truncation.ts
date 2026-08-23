@@ -16,15 +16,32 @@ function spreadSum(
   return { [key]: (a ?? 0) + (b ?? 0) };
 }
 
+/**
+ * Whether the fit removed turns from the prompt that was actually sent.
+ *
+ * Not `fits`: a fit under the physical window that misses the reply reserve still sends
+ * the shortened prompt with `fits: false`, and those turns are just as gone. Every path
+ * that returned the ORIGINAL messages reports `dropped_messages` as zero.
+ */
+export function promptWasShortened(
+  truncation: ContextTruncation | undefined,
+): truncation is ContextTruncation {
+  return (truncation?.dropped_messages ?? 0) > 0;
+}
+
 export function compactionBoundary(
   truncation: ContextTruncation | undefined,
 ): number {
-  if (!truncation?.fits) return 0;
-  // boundary_messages is where the boundary sits in the saved transcript.
-  // dropped_messages accumulates what each fit removed, so a tool-heavy turn reports far
-  // more than the boundary moved and a later real advance looks like none. Fallback only,
-  // for turns saved before the boundary was recorded.
-  return truncation.boundary_messages ?? truncation.dropped_messages ?? 0;
+  if (!promptWasShortened(truncation)) return 0;
+  // boundary_messages is where the boundary sits in the saved transcript, and every fit
+  // that evicts records one, rescues included. So the fallback is only for turns saved
+  // before it existed, hence gated on `fits`, the one shape those turns have: elsewhere
+  // dropped_messages is a per-refit total, not a position, and reading it as one sets a
+  // high-water mark `showsNotice` never sees exceeded again.
+  return (
+    truncation.boundary_messages ??
+    (truncation.fits ? (truncation.dropped_messages ?? 0) : 0)
+  );
 }
 
 function nonNegativeInt(value: number | undefined): number {
@@ -59,11 +76,14 @@ export function latestTurnIsTheProblem(
   budget: number,
 ): boolean {
   if (!truncation) return false;
-  // `latest_turn_exact: false` means the template dropped the newest turn on its own
-  // (every Gemma tool result), so the count is the message's JSON at four characters a
-  // token. Whitespace runs tokenise several times sparser than that, so quoting it as
-  // "N tokens on its own" states a number the turn never cost. Absent means a server
-  // that predates the flag, which only ever sent a count.
+  // `latest_turn_exact: false` means nothing could price the turn at all, so the number
+  // is the message's own JSON at four characters a token while every other number here
+  // is a tokenizer count of a rendered prompt. The two do not share units: 16,400
+  // characters of newlines estimate 8,207 against 557 rendered. Quoting it as "N tokens
+  // on its own" states a number the turn never cost. A turn the template renders as
+  // nothing on its own is NOT this case -- the server prices that by difference and
+  // reports it exact. Absent means a server that predates the flag, which only ever
+  // sent a count.
   if (!(truncation.latest_turn_exact ?? true)) return false;
   // The turn WITHOUT the shared floor, so a turn that clears the budget only once a
   // tool catalogue is standing beside it is not called a turn the budget cannot hold.
