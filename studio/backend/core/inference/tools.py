@@ -11931,7 +11931,11 @@ _EXACT_FIT_PASSES = 5
 
 
 def _exact_prefix_chars(
-    text: str, chars: int, token_budget: float, ctx: int, floor: int | None = None
+    text: str,
+    chars: int,
+    token_budget: float,
+    ctx: int,
+    floor: int | None = None,
 ) -> int:
     """`chars`, shrunk until the prefix really costs `token_budget`. Never grown.
 
